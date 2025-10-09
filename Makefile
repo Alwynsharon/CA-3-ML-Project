@@ -20,10 +20,8 @@ update-branch:
 	git add Model Results
 	git commit -m "Update model and results [automated]" || echo "No changes to commit"
 	git push --force origin update
-
-# deploy: log in to HF CLI & upload files to Space repo
 hf-login:
-	python -m pip install -U "huggingface_hub[cli]"
+	git config --global credential.helper store
 	hf auth login --token $(HF_TOKEN) --add-to-git-credential
 
 push-hub:
