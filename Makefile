@@ -24,7 +24,7 @@ update-branch:
 # deploy: log in to HF CLI & upload files to Space repo
 hf-login:
 	python -m pip install -U "huggingface_hub[cli]"
-	huggingface-cli login --token $(HF_TOKEN) --add-to-git-credential
+	hf auth login --token $(HF_TOKEN) --add-to-git-credential
 
 push-hub:
 	cp Model/drug_pipeline.joblib app/drug_pipeline.joblib || echo "Could not copy model to app folder"
