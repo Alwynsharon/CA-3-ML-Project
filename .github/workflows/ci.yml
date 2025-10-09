@@ -1,3 +1,8 @@
+#
+# Final Consolidated MLOps Workflow
+# Last updated: Thursday, October 9, 2025
+# This workflow is fully aligned with the project's Makefile.
+#
 name: Model Training and Deployment CI
 
 on:
@@ -8,22 +13,23 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: write # Required for 'make update-branch' and 'gh release create'
   actions: read
   pull-requests: write
 
 jobs:
-  train-and-deploy:
+  # --- JOB 1: Build, Test, and Package Artifacts ---
+  # This job runs the core pipeline and tests, then packages the results.
+  build-and-test:
     runs-on: ubuntu-latest
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        token: ${{ secrets.GITHUB_TOKEN }}
         fetch-depth: 0
       
-    - name: Set up Python
+    - name: Set up Python 3.9
       uses: actions/setup-python@v5
       with:
         python-version: '3.9'
@@ -36,14 +42,11 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-pip-
     
-    - name: Install dependencies
-      run: make install
+    - name: Run the full training pipeline (install, train, eval)
+      run: make pipeline
       
-    - name: Train model
-      run: make train
-      
-    - name: Evaluate model and create report
-      run: make eval
+    - name: Run tests with pytest
+      run: make test
         
     - name: Upload model artifacts
       uses: actions/upload-artifact@v4
@@ -54,36 +57,52 @@ jobs:
           Results/
           report.md
         retention-days: 30
+
+  # --- JOB 2: Deploy to Hugging Face and Create Release ---
+  # This job only runs after 'build-and-test' succeeds on the main branch.
+  deploy-and-release:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download model artifacts from previous job
+      uses: actions/download-artifact@v4
+      with:
+        name: model-artifacts
         
-    - name: Deploy to Hugging Face
-      if: github.ref == 'refs/heads/main'
+    - name: Commit model & results to 'update' branch
+      run: make update-branch
+        
+    - name: Deploy all assets to Hugging Face Hub
       run: make deploy
       env:
         HF_TOKEN: ${{ secrets.HF_TOKEN }}
         
-    - name: Create Release
-      if: github.ref == 'refs/heads/main'
+    - name: Create GitHub Release with Dynamic Notes
       run: |
-        if [ -f Model/drug_pipeline.joblib ] && [ -f Results/metrics.txt ]; then
-          gh release create model-v${{ github.run_number }} \
-            --title "Model Release v${{ github.run_number }}" \
-            --notes "Automated model training and deployment
-            
-            ## Model Performance
-            Check the uploaded artifacts for detailed metrics and confusion matrix.
-            
-            ## Changes
-            - Model trained on latest data
-            - Performance metrics updated
-            - Deployed to Hugging Face Spaces" \
-            Model/drug_pipeline.joblib \
-            Results/metrics.txt \
-            Results/model_results.png || echo "Some files missing, skipping file upload"
-        else
-          echo "Model or results files not found, creating release without files"
-          gh release create model-v${{ github.run_number }} \
-            --title "Model Release v${{ github.run_number }}" \
-            --notes "Automated model training and deployment - files available in artifacts"
-        fi
+        METRICS_CONTENT=$(cat Results/metrics.txt)
+
+        RELEASE_NOTES="Automated model training and deployment.
+
+        ## Model Performance
+        \`\`\`
+        ${METRICS_CONTENT}
+        \`\`\`
+        
+        ## Changes
+        - Model trained on latest data from commit ${{ github.sha }}
+        - Deployed to Hugging Face Spaces
+        - Model artifacts committed to the 'update' branch for tracking."
+
+        gh release create model-v${{ github.run_number }} \
+          --title "Model Release v${{ github.run_number }}" \
+          --notes "$RELEASE_NOTES" \
+          Model/drug_pipeline.joblib \
+          Results/metrics.txt \
+          Results/model_results.png
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
