@@ -46,7 +46,7 @@ push-hub:
 	cp Model/drug_pipeline.joblib app/drug_pipeline.joblib || echo "Could not copy model to app folder"
 	# Upload the app, model, and results to a Hugging Face Space
 	hf upload alwynsharon18/DrugClassification ./app --repo-type=space --commit-message="Sync App files with model"
-	hf upload alwynsharon18/DrugClassification ./Model --repo-type=space --commit-message="Sync Model"
+	hf upload alwynsharon18/DrugClassification ./model --repo-type=space --commit-message="Sync Model"
 	hf upload alwynsharon18/DrugClassification ./Results --repo-type=space --commit-message="Sync Results"
 
 deploy: hf-login push-hub
